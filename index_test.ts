@@ -108,3 +108,23 @@ test("if false", () => {
 test("complex if", () => {
   expect(interpret("(if (< 1 2) 1 2)")).toEqual(1);
 });
+
+test("list", () => {
+  expect(interpret("(list 1 2 3)")).toEqual([1, 2, 3]);
+});
+
+test("cdr", () => {
+  expect(interpret("(cdr (list 1 2 3))")).toEqual([2, 3]);
+});
+
+test("random bunch of math stuff", () => {
+  expect(interpret(" (if (> (* 11 11) 120) (* 7 6) oops) ")).toEqual(42);
+});
+
+test("quote", () => {
+  expect(interpret("(quote (1 2 3))")).toEqual([1, 2, 3]);
+});
+
+test("lambda", () => {
+  expect(interpret("((lambda (x y) (+ x y 1)) 5 6)")).toEqual(12);
+});

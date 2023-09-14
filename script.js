@@ -33,28 +33,81 @@ var atom = function(token) {
     return { type: "symbol", value: token };
   }
 };
-var fold = (reducer, init, xs) => {
+var fold = (reducer, init, args) => {
   let acc = init;
-  for (const x of xs) {
+  for (const x of args) {
     acc = reducer(acc, x);
   }
   return acc;
 };
 var standard_env = function() {
   let env = {
-    "+": (xs) => fold((acc, x) => acc + x, 0, xs),
-    "-": (xs) => fold((acc, x) => acc - x, xs.shift(), xs),
-    "*": (xs) => fold((acc, x) => acc * x, 1, xs),
-    "/": (xs) => fold((acc, x) => acc * x, xs.shift(), xs),
-    ">": (xs) => xs[0] > xs[1],
-    "<": (xs) => xs[0] < xs[1],
-    begin: (xs) => xs[xs.length - 1]
+    "+": (args) => fold((acc, x) => acc + x, 0, args),
+    "-": (args) => fold((acc, x) => acc - x, args.shift(), args),
+    "*": (args) => fold((acc, x) => acc * x, 1, args),
+    "/": (args) => fold((acc, x) => acc * x, args.shift(), args),
+    ">": (args) => args[0] > args[1],
+    "<": (args) => args[0] < args[1],
+    car: (args) => args[0][0],
+    apply: (args) => args[0](args.slice(1)),
+    list: (args) => args,
+    cdr: (args) => args[0].slice(1),
+    cons: (args) => [args[0]].concat(args[1]),
+    len: (args) => args.length,
+    begin: (args) => args[args.length - 1]
   };
-  return env;
+  return new Env(env);
 };
+
+class Env {
+  outer;
+  data;
+  constructor(data, outer) {
+    this.outer = outer;
+    this.data = data;
+  }
+  find(key) {
+    if (key in this.data) {
+      return this.data[key];
+    } else if (this.outer) {
+      return this.outer.find(key);
+    } else {
+      throw "unbound variable not found" + key;
+    }
+  }
+  inner_set(key, value) {
+    this.data[key] = value;
+  }
+  find_and_set(key, value) {
+    if (key in this.data) {
+      this.data[key] = value;
+    } else if (this.outer) {
+      this.outer.find_and_set(key, value);
+    } else {
+      throw "didnt find variable to set" + key;
+    }
+  }
+}
+
+class Procedure {
+  params;
+  body;
+  env;
+  constructor(params, body, env) {
+    this.params = params;
+    this.body = body;
+    this.env = env;
+  }
+  call(args) {
+    this.params.forEach((param, i) => {
+      this.env.inner_set(param, args[i]);
+    });
+    return evaluate(this.body, this.env);
+  }
+}
 var evaluate = function(x, env = standard_env()) {
   if (!Array.isArray(x) && x.type === "symbol") {
-    return env[x.value];
+    return env.find(x.value);
   } else if (!Array.isArray(x) && x.type === "number") {
     return x.value;
   } else if (!Array.isArray(x) && x.type === "boolean") {
@@ -63,8 +116,10 @@ var evaluate = function(x, env = standard_env()) {
     if (x[0].value === "define") {
       let symbol = x[1].value;
       let value = evaluate(x[2], env);
-      env[symbol] = value;
-    } else if (x[0].value === "if") {
+      env.inner_set(symbol, value);
+      return;
+    }
+    if (x[0].value === "if") {
       let condition = evaluate(x[1], env);
       let true_branch = x[2];
       let false_branch = x[3];
@@ -73,13 +128,28 @@ var evaluate = function(x, env = standard_env()) {
       } else {
         return evaluate(false_branch, env);
       }
+    }
+    if (x[0].value === "quote") {
+      return x[1].map((x2) => x2.value);
+    }
+    if (x[0].value === "set!") {
+      let symbol = x[1].value;
+      let value = evaluate(x[2], env);
+      env.find_and_set(symbol, value);
+      return;
+    }
+    if (x[0].value === "lambda") {
+      let params = x[1].map((x2) => x2.value);
+      let body = x[2];
+      return new Procedure(params, body, env);
     } else {
       let fn = evaluate(x[0], env);
       let args = x.slice(1).map((x2) => evaluate(x2, env));
       if (fn instanceof Function) {
         return fn(args);
+      } else if (fn instanceof Procedure) {
+        return fn.call(args);
       } else {
-        console.log(env);
       }
     }
   } else {
