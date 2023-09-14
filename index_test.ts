@@ -128,3 +128,59 @@ test("quote", () => {
 test("lambda", () => {
   expect(interpret("((lambda (x y) (+ x y 1)) 5 6)")).toEqual(12);
 });
+
+test("lambda with define", () => {
+  expect(
+    interpret("(begin ((define area (lambda (w h) (* w h)))) (area 10 10))"),
+  ).toEqual(100);
+});
+
+test("nested lamdas", () => {
+  expect(
+    interpret(`
+      (begin 
+        (
+          (define area (lambda (w h) (* w h)))
+          (define perimeter (lambda (w h) ( + (* w 2) (* h 2))))
+          (define area-perimeter (lambda (w h) (list (area w h) (perimeter w h))))
+        )
+        (list (area 10 10) (perimeter 10 10) (area-perimeter 10 10))))`),
+  ).toEqual([100, 40, [100, 40]]);
+});
+
+test("making a recursive loop to count", () => {
+  expect(
+    interpret(`
+      (begin
+        ( (define count (lambda (n) (if (= n 0) 0 (+ n (count (- n 1)))))))
+        (count 10))`),
+  ).toEqual(55);
+});
+
+test("making a mapcar fn", () => {
+  expect(
+    interpret(`
+      (begin
+        ( (define mapcar (lambda (f l) (if (null? l) () (cons (f (car l)) (mapcar f (cdr l)))))))
+        (mapcar (lambda (x) (+ x 1)) (list 1 2 3 4 5)))`),
+  ).toEqual([2, 3, 4, 5, 6]);
+});
+
+test("count occurences recursively", () => {
+  expect(
+    interpret(
+      "(begin (define count (lambda (item L) (if (null? L) 0 (+ (= item (car L)) (count item (cdr L)))))) (count 0 (list 0 1 0)))",
+    ),
+  ).toEqual(2);
+});
+
+test("count occurences of a symbol", () => {
+  expect(
+    interpret(
+      `(begin 
+        (define count (lambda (item L) (if (null? L) 0 (+ (= item (car L)) (count item (cdr L)))))) 
+        (count (quote the) (quote (the more the merrier the bigger the better)))
+      )`,
+    ),
+  ).toEqual(4);
+});

@@ -95,12 +95,17 @@ let standard_env = function(): Env {
     "/": (args: any[]) => fold((acc, x) => acc * x, args.shift(), args),
     ">": (args: any[]) => args[0] > args[1],
     "<": (args: any[]) => args[0] < args[1],
+    "=": (args: any[]) => args[0] == args[1],
+    "null?": (args: any[]) => args[0].length == 0,
     car: (args: any[]) => args[0][0],
     apply: (args: any[]) => args[0](args.slice(1)),
     list: (args: any[]) => args,
     cdr: (args: any[]) => args[0].slice(1),
     cons: (args: any[]) => [args[0]].concat(args[1]),
-    len: (args: any[]) => args.length,
+    len: (args: any[]) => {
+      console.log(args.length);
+      args.length;
+    },
     begin: (args: any[]) => args[args.length - 1],
   };
   return new Env(env);
@@ -164,6 +169,10 @@ let evaluate = function(x: Token[] | Token, env = standard_env()): any {
   } else if (!Array.isArray(x) && x.type === "boolean") {
     return x.value;
   } else if (Array.isArray(x)) {
+    if (x === undefined || x.length === 0) {
+      return;
+    }
+
     // Define
     // -------
     if (x[0].value === "define") {
@@ -189,8 +198,12 @@ let evaluate = function(x: Token[] | Token, env = standard_env()): any {
     // Quote
     // -------
     if (x[0].value === "quote") {
+      if (Array.isArray(x[1])) {
+        return x[1].map((x) => x.value);
+      } else {
+        return x[1].value;
+      }
       // @ts-ignore
-      return x[1].map((x) => x.value);
     }
 
     // Set!

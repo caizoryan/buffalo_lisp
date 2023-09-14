@@ -48,12 +48,17 @@ var standard_env = function() {
     "/": (args) => fold((acc, x) => acc * x, args.shift(), args),
     ">": (args) => args[0] > args[1],
     "<": (args) => args[0] < args[1],
+    "=": (args) => args[0] == args[1],
+    "null?": (args) => args[0].length == 0,
     car: (args) => args[0][0],
     apply: (args) => args[0](args.slice(1)),
     list: (args) => args,
     cdr: (args) => args[0].slice(1),
     cons: (args) => [args[0]].concat(args[1]),
-    len: (args) => args.length,
+    len: (args) => {
+      console.log(args.length);
+      args.length;
+    },
     begin: (args) => args[args.length - 1]
   };
   return new Env(env);
@@ -113,6 +118,9 @@ var evaluate = function(x, env = standard_env()) {
   } else if (!Array.isArray(x) && x.type === "boolean") {
     return x.value;
   } else if (Array.isArray(x)) {
+    if (x === undefined || x.length === 0) {
+      return;
+    }
     if (x[0].value === "define") {
       let symbol = x[1].value;
       let value = evaluate(x[2], env);
@@ -130,7 +138,11 @@ var evaluate = function(x, env = standard_env()) {
       }
     }
     if (x[0].value === "quote") {
-      return x[1].map((x2) => x2.value);
+      if (Array.isArray(x[1])) {
+        return x[1].map((x2) => x2.value);
+      } else {
+        return x[1].value;
+      }
     }
     if (x[0].value === "set!") {
       let symbol = x[1].value;
