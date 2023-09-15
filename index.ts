@@ -11,6 +11,9 @@
 // Env    = dict
 //
 
+import { Atom, read_from_tokens_new } from "./new_parser";
+import { Scanner } from "./tokeniser";
+
 // Tokenize
 // ------------
 // Tokenize takes a string of characters and converts it into a list of tokens.
@@ -19,65 +22,6 @@ export let tokenize = function(input: string) {
 };
 
 // Makes the AST
-export let read_from_tokens = function(tokens: string[]): Token | Token[] {
-  // First check the length of the tokens
-  if (tokens.length == 0) {
-    throw "unexpected EOF while reading";
-  }
-
-  // Pop the first token
-  let token = tokens.shift();
-
-  if (token == "(") {
-    // If the token is a left parenthesis, then we start a new expression
-    let list: any[] = [];
-    while (tokens[0] != ")") {
-      list.push(read_from_tokens(tokens));
-    }
-    tokens.shift(); // pop off ')'
-    return list;
-  } else if (token == ")") {
-    // If the token is a right parenthesis, then we have an error
-    throw "unexpected )";
-  } else if (token) {
-    // Otherwise, we have an atom
-    return atom(token);
-  } else {
-    throw "unexpected token";
-  }
-};
-
-type Token = AtomNumber | AtomSymbol | AtomBoolean;
-
-interface AtomNumber {
-  type: "number";
-  value: number;
-}
-
-interface AtomSymbol {
-  type: "symbol";
-  value: string;
-}
-
-interface AtomBoolean {
-  type: "boolean";
-  value: boolean;
-}
-
-let atom = function(token: string): Token {
-  // if can parse as number, then parse as number
-  // else if can parse as boolean, then parse as boolean
-  // else parse as symbol
-  if (!isNaN(parseFloat(token))) {
-    return { type: "number", value: parseFloat(token) };
-  } else if (token == "#t") {
-    return { type: "boolean", value: true };
-  } else if (token == "#f") {
-    return { type: "boolean", value: false };
-  } else {
-    return { type: "symbol", value: token };
-  }
-};
 
 const fold = (reducer: (acc: any, a: any) => any, init: any, args: any) => {
   let acc = init;
@@ -97,15 +41,13 @@ let standard_env = function(): Env {
     "<": (args: any[]) => args[0] < args[1],
     "=": (args: any[]) => args[0] == args[1],
     "null?": (args: any[]) => args[0].length == 0,
+    "string-append": (args: any[]) => args.join(""),
     car: (args: any[]) => args[0][0],
     apply: (args: any[]) => args[0](args.slice(1)),
     list: (args: any[]) => args,
     cdr: (args: any[]) => args[0].slice(1),
     cons: (args: any[]) => [args[0]].concat(args[1]),
-    len: (args: any[]) => {
-      console.log(args.length);
-      args.length;
-    },
+    len: (args: any[]) => args.length,
     begin: (args: any[]) => args[args.length - 1],
   };
   return new Env(env);
@@ -161,12 +103,14 @@ class Procedure {
 }
 
 // clean this up
-let evaluate = function(x: Token[] | Token, env = standard_env()): any {
+let evaluate = function(x: Atom[] | Atom, env = standard_env()): any {
   if (!Array.isArray(x) && x.type === "symbol") {
     return env.find(x.value);
   } else if (!Array.isArray(x) && x.type === "number") {
     return x.value;
   } else if (!Array.isArray(x) && x.type === "boolean") {
+    return x.value;
+  } else if (!Array.isArray(x) && x.type === "string") {
     return x.value;
   } else if (Array.isArray(x)) {
     if (x === undefined || x.length === 0) {
@@ -241,7 +185,13 @@ let evaluate = function(x: Token[] | Token, env = standard_env()): any {
 };
 
 export let interpret = function(program: string) {
-  let tokens = tokenize(program);
-  let ast = read_from_tokens(tokens);
+  // let tokens = tokenize(program);
+  // let ast = read_from_tokens(tokens);
+
+  console.log("program");
+  let tokens = new Scanner(program).scan();
+  console.log(tokens);
+  let ast = read_from_tokens_new(tokens);
+  console.log(ast);
   return evaluate(ast);
 };

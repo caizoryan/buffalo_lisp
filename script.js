@@ -1,37 +1,153 @@
-// index.ts
-var tokenize = function(input) {
-  return input.replace(/\(/g, " ( ").replace(/\)/g, " ) ").trim().split(/\s+/);
+// tokeniser.ts
+var TokenType = {
+  LeftBracket: "LeftBracket",
+  RightBracket: "RightBracket",
+  Symbol: "Symbol",
+  Number: "Number",
+  Boolean: "Boolean",
+  String: "String",
+  Eof: "Eof"
 };
-var read_from_tokens = function(tokens) {
+
+class Token {
+  tokenType;
+  lexeme;
+  literal;
+  constructor(tokenType, lexeme, literal) {
+    this.tokenType = tokenType;
+    this.lexeme = lexeme;
+    this.literal = literal;
+  }
+}
+
+class Scanner {
+  start = 0;
+  current = 0;
+  tokens = [];
+  source;
+  constructor(source) {
+    this.source = source;
+  }
+  scan() {
+    while (!this.isAtEnd()) {
+      this.start = this.current;
+      const char = this.advance();
+      switch (char) {
+        case "(":
+          this.addToken(TokenType.LeftBracket);
+          break;
+        case ")":
+          this.addToken(TokenType.RightBracket);
+          break;
+        case " ":
+        case "\r":
+        case "\t":
+        case "\n":
+          break;
+        case "#":
+          if (this.peek() === "t") {
+            this.advance();
+            this.addToken(TokenType.Boolean, true);
+            break;
+          }
+          if (this.peek() === "f") {
+            this.advance();
+            this.addToken(TokenType.Boolean, false);
+            break;
+          }
+        case '"':
+          while (this.peek() !== '"' && !this.isAtEnd()) {
+            this.advance();
+          }
+          const literal = this.source.slice(this.start + 1, this.current);
+          this.addToken(TokenType.String, literal);
+          this.advance();
+          break;
+        default:
+          if (this.isDigit(char)) {
+            while (this.isDigitOrDot(this.peek()) && !this.isAtEnd()) {
+              this.advance();
+            }
+            const numberAsString = this.source.slice(this.start, this.current);
+            const literal2 = parseFloat(numberAsString);
+            this.addToken(TokenType.Number, literal2);
+            break;
+          } else {
+            if (this.isIdentifier(char)) {
+              while (this.isIdentifier(this.peek()) && !this.isAtEnd()) {
+                this.advance();
+              }
+              this.addToken(TokenType.Symbol);
+              break;
+            }
+          }
+      }
+    }
+    this.tokens.push(new Token(TokenType.Eof, "", null));
+    return this.tokens;
+  }
+  isDigit(char) {
+    return char >= "0" && char <= "9";
+  }
+  isDigitOrDot(char) {
+    return this.isDigit(char) || char === ".";
+  }
+  isIdentifier(char) {
+    return !["(", ")", " ", "\n", "\r"].includes(char);
+  }
+  isAtEnd() {
+    return this.current >= this.source.length;
+  }
+  advance() {
+    return this.source[this.current++];
+  }
+  peek() {
+    return this.source[this.current];
+  }
+  addToken(tokenType, literal) {
+    const lexeme = this.source.slice(this.start, this.current);
+    this.tokens.push(new Token(tokenType, lexeme, literal));
+  }
+}
+
+// new_parser.ts
+var read_from_tokens_new = function(tokens) {
   if (tokens.length == 0) {
     throw "unexpected EOF while reading";
   }
   let token = tokens.shift();
-  if (token == "(") {
+  if (token?.tokenType == TokenType.LeftBracket) {
     let list = [];
-    while (tokens[0] != ")") {
-      list.push(read_from_tokens(tokens));
+    while (tokens[0].tokenType != TokenType.RightBracket) {
+      list.push(read_from_tokens_new(tokens));
     }
     tokens.shift();
     return list;
-  } else if (token == ")") {
-    throw "unexpected )";
-  } else if (token) {
+  } else if (token?.tokenType == TokenType.RightBracket) {
+    return { type: "error", value: "unexpected )" };
+  } else if (token && token.tokenType != TokenType.Eof) {
     return atom(token);
   } else {
     throw "unexpected token";
   }
 };
 var atom = function(token) {
-  if (!isNaN(parseFloat(token))) {
-    return { type: "number", value: parseFloat(token) };
-  } else if (token == "#t") {
-    return { type: "boolean", value: true };
-  } else if (token == "#f") {
-    return { type: "boolean", value: false };
+  if (token.tokenType == TokenType.Number) {
+    return { type: "number", value: token.literal };
+  } else if (token.tokenType == TokenType.Boolean) {
+    return { type: "boolean", value: token.literal };
+  } else if (token.tokenType == TokenType.String) {
+    return { type: "string", value: token.literal };
+  } else if (token.tokenType == TokenType.Symbol) {
+    return { type: "symbol", value: token.lexeme };
   } else {
-    return { type: "symbol", value: token };
+    throw "unexpected token";
   }
+};
+
+// index.ts
+var tokenize = function(input) {
+  return input.replace(/\(/g, " ( ").replace(/\)/g, " ) ").trim().split(/\s+/);
 };
 var fold = (reducer, init, args) => {
   let acc = init;
@@ -50,15 +166,13 @@ var standard_env = function() {
     "<": (args) => args[0] < args[1],
     "=": (args) => args[0] == args[1],
     "null?": (args) => args[0].length == 0,
+    "string-append": (args) => args.join(""),
     car: (args) => args[0][0],
     apply: (args) => args[0](args.slice(1)),
     list: (args) => args,
     cdr: (args) => args[0].slice(1),
     cons: (args) => [args[0]].concat(args[1]),
-    len: (args) => {
-      console.log(args.length);
-      args.length;
-    },
+    len: (args) => args.length,
     begin: (args) => args[args.length - 1]
   };
   return new Env(env);
@@ -117,6 +231,8 @@ var evaluate = function(x, env = standard_env()) {
     return x.value;
   } else if (!Array.isArray(x) && x.type === "boolean") {
     return x.value;
+  } else if (!Array.isArray(x) && x.type === "string") {
+    return x.value;
   } else if (Array.isArray(x)) {
     if (x === undefined || x.length === 0) {
       return;
@@ -169,12 +285,14 @@ var evaluate = function(x, env = standard_env()) {
   }
 };
 var interpret = function(program) {
-  let tokens = tokenize(program);
-  let ast = read_from_tokens(tokens);
+  console.log("program");
+  let tokens = new Scanner(program).scan();
+  console.log(tokens);
+  let ast = read_from_tokens_new(tokens);
+  console.log(ast);
   return evaluate(ast);
 };
 export {
   tokenize,
-  read_from_tokens,
   interpret
 };
